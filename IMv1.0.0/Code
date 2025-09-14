@@ -1,0 +1,195 @@
+import pygame
+from sys import exit
+import time
+from datetime import datetime
+import webbrowser
+import random
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+
+# THIS IS A KEYLOGGER, IT RECORDS CLICKS AND KEYSTROKES THEN PRESENTS THEM IN THE PYTHON TERMINAL.
+# THIS IS PURELY FOR SECURITY AND PRIVACY REASONS. A BIT OF FUCKERY ALSO.
+# THIS PROGRAM ALSO OPENS TABS AND IS VERY LOUD IF YOU CHOOSE FOR IT TO BE.
+# BE CAREFUL WHEN TWEAKING NOTEPAD.EXE SPAWN RATES, CRASHING IS VERY COMMON.
+
+gameWidth = 1920
+gameLength = 1080
+pygame.init()
+
+# initialize sound; wrap in try in case of audio init failure
+try:
+    pygame.mixer.init()
+except Exception as e:
+    print("Warning: mixer init failed:", e)
+
+screen = pygame.display.set_mode((gameWidth, gameLength))
+pygame.display.set_caption("Intruder monitor v0.3")
+icon = Path(__file__).parent
+logo_path = icon / "Assets" / "logo.png"
+logo = pygame.image.load(str(logo_path))
+pygame.display.set_icon(logo)
+
+pygame.display.set_icon(icon)
+clock = pygame.time.Clock()
+
+# Load background image (desktop screenshot)
+start_img = pygame.image.load(r'').convert()                                        #Desktop image input
+
+now = datetime.now()
+current_time = now.strftime("%H:%M:%S")
+
+status = True
+printed_time = False
+buffer_seconds = 5         # Buffer between run and movement logging
+start_time = time.time()
+
+clickDef = pygame.mixer.Sound(r"")                                                  #Default clicking sound input
+clickDef.set_volume(0.7)
+running = True
+
+# Load sounds                                                                       #Sound input 
+sounds = []
+for path in (
+    r"", #Here
+):
+    try:
+        sounds.append(pygame.mixer.Sound(path))
+    except Exception as e:
+        print(f"Warning: failed to load sound {path}: {e}")
+
+# If no sounds loaded, sounds list will be empty — check before playing
+# -----------------------------
+# Define invisible button area (tweak as needed)
+button_rect = pygame.Rect(926, 249, 48, 48)  # trollButton
+# -----------------------------
+
+video_Path = r""                                     #Video Path input
+
+# ---------- Notepad file config ----------
+notepad_file = r""                                                              #Notepad file input
+# ensure directory exists and file exists
+os.makedirs(os.path.dirname(notepad_file), exist_ok=True)
+if not os.path.exists(notepad_file):
+    open(notepad_file, "a", encoding="utf-8").close()
+# -----------------------------------------
+
+def open_file(path):
+    """Open file with default system app. Works cross-platform."""
+    try:
+        if os.name == "nt":          # Windows
+            os.startfile(path)
+        elif sys.platform == "darwin":  # macOS
+            subprocess.Popen(["open", path])
+        else:                        # Linux / other POSIX
+            subprocess.Popen(["xdg-open", path])
+    except Exception as e:
+        print("Failed to open file:", e)
+
+# Safety controls for Notepad spawning (prevents flooding)
+TEST_MODE = False            # True = only print, False = actually launch Notepad
+CLICK_COOLDOWN = 0.6        # seconds between allowed spawns
+MAX_SPAWNS = 5              # hard limit of Notepads to spawn in this run
+_last_spawn_time = 0.0
+_spawn_count = 0
+
+# optional debug toggle: press D to show/hide the red rectangle and print mouse coords
+debug = False
+
+while status:
+    # redraw background every frame (important)
+    screen.blit(start_img, (0, 0))
+
+    # DEBUG: show the rectangle so you can tweak position visually
+    if debug:
+        pygame.draw.rect(screen, (255, 0, 0), button_rect, 2)
+
+    for event in pygame.event.get():
+        # Movement detection (first motion after buffer_seconds)
+        if event.type == pygame.MOUSEMOTION and not printed_time:
+            if time.time() - start_time >= buffer_seconds:
+                now = datetime.now()
+                current_time = now.strftime("Movement detected: " + "%H:%M:%S")
+                print(current_time)
+                printed_time = True
+
+            if debug:
+                # only print mouse coords in debug to avoid spamming the console
+                print("Mouse at:", event.pos)
+
+        # Handle mouse clicks (only LEFT button release)
+        if event.type == pygame.MOUSEBUTTONUP and getattr(event, "button", None) == 1:
+            # log click position
+            print("Mouse clicked at:", event.pos)
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
+            # get current modifier keys (ctrl, alt, shift, etc.)
+             if pygame.key.get_mods() & pygame.KMOD_CTRL:
+                status = False
+
+            if button_rect.collidepoint(event.pos):
+                print("Invisible button clicked!")
+                webbrowser.open_new_tab("")                                                     #Web browser opener input
+
+                # SAFE: Notepad spawn logic with cooldown, cap, and test mode
+                now_time = time.time()
+                if now_time - _last_spawn_time < CLICK_COOLDOWN:
+                    print("Notepad spawn ignored: cooldown active.")
+                elif _spawn_count >= MAX_SPAWNS:
+                    print("Notepad spawn ignored: spawn cap reached.")
+                else:
+                    # Before opening, append a small log entry to the notepad file
+                    try:
+                        with open(notepad_file, "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Button clicked at {event.pos}\n")
+                    except Exception as e:
+                        print("Warning: failed to write to notepad file:", e)
+
+                    print("Attempting to open Notepad with file (TEST_MODE=%s)..." % TEST_MODE)
+                    if TEST_MODE:
+                        print(f"[TEST MODE] would open: notepad.exe {notepad_file}")
+                    else:
+                        try:
+                            # open specific file in Notepad
+                            subprocess.Popen(["notepad.exe", notepad_file])
+                        except Exception as e:
+                            print("Failed to open Notepad file:", e)
+
+                    _last_spawn_time = now_time
+                    _spawn_count += 1
+
+                # Video open (non-blocking) — still attempted regardless of TEST_MODE
+                try:
+                    open_file(video_Path)
+                except Exception as e:
+                    print("Couldn't launch video:", e)
+
+                # play a random sound if any loaded
+                if sounds:
+                    try:
+                        random.choice(sounds).play()
+                    except Exception as e:
+                        print("Failed to play sound:", e)
+                else:
+                    print("No sounds loaded to play.")
+            else:
+                print("Click log (outside button)")
+                clickDef.play()
+
+        # Toggle debug mode
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_d:
+                debug = not debug
+                print("Debug mode:", debug)
+
+        # Quit
+        if event.type == pygame.QUIT:
+            status = False
+
+    pygame.display.update()
+    clock.tick(24)
+
+pygame.quit()
+exit()
